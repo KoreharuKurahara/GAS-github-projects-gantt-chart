@@ -149,8 +149,8 @@ function syncGitHubProject() {
     console.log(`${items.length} 件のアイテム（${results.length} 行）を同期しました。`);
     
     // フィルターを追加（C列のStatusにフィルターをかける）
-    const lastCol = sheet.getLastColumn();
-    const filterRange = sheet.getRange(1, 1, results.length + 1, lastCol);
+    // フィルターを追加（データ列のみにフィルターをかける）
+    const filterRange = sheet.getRange(1, 1, results.length + 1, headers.length);
     
     // 既存のフィルターがあれば削除
     const existingFilter = sheet.getFilter();

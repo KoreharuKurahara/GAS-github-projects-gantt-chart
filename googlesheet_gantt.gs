@@ -16,8 +16,15 @@ function syncGitHubProject() {
     query($login: String!, $number: Int!) {
       organization(login: $login) {
         projectV2(number: $number) {
+          id
+          fields(first: 20) {
+            nodes {
+              ... on ProjectV2FieldCommon { id name }
+            }
+          }
           items(first: 100) {
             nodes {
+              id
               content {
                 ... on DraftIssue { title }
                 ... on Issue { title }
@@ -67,8 +74,17 @@ function syncGitHubProject() {
     return;
   }
 
+  const projectId = project.id;
+  
+  // RealStartDateのField IDを取得
+  const realStartDateField = project.fields.nodes.find(f => f.name === "RealStartDate");
+  const realStartDateFieldId = realStartDateField ? realStartDateField.id : null;
+
   const items = project.items.nodes;
   const results = [];
+  
+  // 今日の日付 (YYYY-MM-DD)
+  const todayDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
   // PlanStartDate 昇順で並べ替え（空は末尾）
   const getPlanStartValue = (item) => {
@@ -102,8 +118,17 @@ function syncGitHubProject() {
     const status = getVal("Status");
     const planStart = getVal("PlanStartDate");
     const planEnd = getVal("PlanEndDate");
-    const realStart = getVal("RealStartDate");
+    let realStart = getVal("RealStartDate"); // 後で更新する可能性があるため let に変更
     const realEnd = getVal("RealEndDate");
+    
+    // Statusが "in-progress" (または "In Progress") かつ RealStartDate が空の場合、今日の日付をセット
+    if (status && (status.toLowerCase() === "in-progress" || status === "In Progress") && !realStart && realStartDateFieldId) {
+      console.log(`Updating RealStartDate for item: ${title}`);
+      const success = updateItemDate(projectId, item.id, realStartDateFieldId, todayDate);
+      if (success) {
+        realStart = todayDate; // シートへの反映用
+      }
+    }
 
     // 予定の行
     results.push([
@@ -251,9 +276,17 @@ function drawGanttChart(sheet, dataRows) {
     }
     
     // 実際のガントバー（奇数行：実際行）
-    if (row % 2 === 1 && realStart && realEnd) {
+    if (row % 2 === 1 && realStart) {
       const startDate = new Date(realStart);
-      const endDate = new Date(realEnd);
+      
+      let endDate;
+      if (realEnd) {
+        endDate = new Date(realEnd);
+      } else {
+        // RealEndDateが空の場合は今日の日付を使用
+        endDate = new Date();
+        endDate.setHours(0, 0, 0, 0);
+      }
       
       // ガントバーの開始位置と長さを計算
       const startDiff = Math.ceil((startDate - GANTT_START_DATE) / (1000 * 60 * 60 * 24));
@@ -284,6 +317,56 @@ function drawGanttChart(sheet, dataRows) {
     const height = Math.min(2, dataRows - (i * 2));
     // 外枠と縦罫線のみ（予定と実際の間は線を引かない）
     sheet.getRange(startRow, 1, height, totalColsCount).setBorder(true, true, true, true, true, false);
+  }
+}
+
+/**
+ * アイテムの日付フィールドを更新するMutation
+ */
+function updateItemDate(projectId, itemId, fieldId, dateString) {
+  const mutation = `
+    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $date: Date!) {
+      updateProjectV2ItemFieldValue(
+        input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { date: $date }
+        }
+      ) {
+        projectV2Item { id }
+      }
+    }
+  `;
+  
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: { Authorization: `Bearer ${GH_TOKEN}` },
+    payload: JSON.stringify({
+      query: mutation,
+      variables: {
+        projectId: projectId,
+        itemId: itemId,
+        fieldId: fieldId,
+        date: dateString
+      }
+    }),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch("https://api.github.com/graphql", options);
+    const json = JSON.parse(response.getContentText());
+    
+    if (json.errors) {
+      console.error("Mutation Error:", json.errors);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("Mutation Exception:", e);
+    return false;
   }
 }
 

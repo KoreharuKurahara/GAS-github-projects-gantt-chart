@@ -148,6 +148,19 @@ function syncGitHubProject() {
     sheet.getRange(2, 1, results.length, headers.length).setValues(results);
     console.log(`${items.length} 件のアイテム（${results.length} 行）を同期しました。`);
     
+    // フィルターを追加（C列のStatusにフィルターをかける）
+    const lastCol = sheet.getLastColumn();
+    const filterRange = sheet.getRange(1, 1, results.length + 1, lastCol);
+    
+    // 既存のフィルターがあれば削除
+    const existingFilter = sheet.getFilter();
+    if (existingFilter) {
+      existingFilter.remove();
+    }
+    
+    // 新しいフィルターを作成
+    filterRange.createFilter();
+    
     // ガントチャートを描画
     drawGanttChart(sheet, results.length);
   }

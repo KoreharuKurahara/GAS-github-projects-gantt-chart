@@ -17,9 +17,11 @@ function syncGitHubProject() {
       organization(login: $login) {
         projectV2(number: $number) {
           id
-          fields(first: 20) {
+          fields(first: 50) {
             nodes {
-              ... on ProjectV2FieldCommon { id name }
+              ... on ProjectV2Field { id name dataType }
+              ... on ProjectV2IterationField { id name dataType }
+              ... on ProjectV2SingleSelectField { id name dataType }
             }
           }
           items(first: 100) {
@@ -76,9 +78,9 @@ function syncGitHubProject() {
 
   const projectId = project.id;
   
-  // RealStartDateのField IDを取得
+  // RealStartDate と RealEndDate のフィールド情報を取得
   const realStartDateField = project.fields.nodes.find(f => f.name === "RealStartDate");
-  const realStartDateFieldId = realStartDateField ? realStartDateField.id : null;
+  const realEndDateField = project.fields.nodes.find(f => f.name === "RealEndDate");
 
   const items = project.items.nodes;
   const results = [];
@@ -118,15 +120,24 @@ function syncGitHubProject() {
     const status = getVal("Status");
     const planStart = getVal("PlanStartDate");
     const planEnd = getVal("PlanEndDate");
-    let realStart = getVal("RealStartDate"); // 後で更新する可能性があるため let に変更
-    const realEnd = getVal("RealEndDate");
+    let realStart = getVal("RealStartDate");
+    let realEnd = getVal("RealEndDate");
     
-    // Statusが "in-progress" (または "In Progress") かつ RealStartDate が空の場合、今日の日付をセット
-    if (status && (status.toLowerCase() === "in-progress" || status === "In Progress") && !realStart && realStartDateFieldId) {
+    // Statusが "in-progress" かつ RealStartDate が空の場合、今日の日付をセット
+    if (status && (status.toLowerCase() === "in-progress" || status === "In Progress") && !realStart && realStartDateField) {
       console.log(`Updating RealStartDate for item: ${title}`);
-      const success = updateItemDate(projectId, item.id, realStartDateFieldId, todayDate);
+      const success = updateItemFieldValue(projectId, item.id, realStartDateField, todayDate);
       if (success) {
         realStart = todayDate; // シートへの反映用
+      }
+    }
+    
+    // Statusが "done" (Close状態) かつ RealEndDate が空の場合、今日の日付をセット
+    if (status && (status.toLowerCase() === "done" || status.toLowerCase() === "closed") && !realEnd && realEndDateField) {
+      console.log(`Updating RealEndDate for item: ${title}`);
+      const success = updateItemFieldValue(projectId, item.id, realEndDateField, todayDate);
+      if (success) {
+        realEnd = todayDate; // シートへの反映用
       }
     }
 
@@ -321,17 +332,21 @@ function drawGanttChart(sheet, dataRows) {
 }
 
 /**
- * アイテムの日付フィールドを更新するMutation
+ * アイテムのフィールド値を更新するMutation (Date型とText型に対応)
  */
-function updateItemDate(projectId, itemId, fieldId, dateString) {
+function updateItemFieldValue(projectId, itemId, field, value) {
+  const isText = field.dataType === "TEXT";
+  const valueKey = isText ? "text" : "date";
+  const valueType = isText ? "String!" : "Date!";
+
   const mutation = `
-    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $date: Date!) {
+    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $val: ${valueType}) {
       updateProjectV2ItemFieldValue(
         input: {
           projectId: $projectId
           itemId: $itemId
           fieldId: $fieldId
-          value: { date: $date }
+          value: { ${valueKey}: $val }
         }
       ) {
         projectV2Item { id }
@@ -348,8 +363,8 @@ function updateItemDate(projectId, itemId, fieldId, dateString) {
       variables: {
         projectId: projectId,
         itemId: itemId,
-        fieldId: fieldId,
-        date: dateString
+        fieldId: field.id,
+        val: value
       }
     }),
     muteHttpExceptions: true
@@ -361,6 +376,7 @@ function updateItemDate(projectId, itemId, fieldId, dateString) {
     
     if (json.errors) {
       console.error("Mutation Error:", json.errors);
+      console.error("Payload:", options.payload); // エラー調査用
       return false;
     }
     return true;

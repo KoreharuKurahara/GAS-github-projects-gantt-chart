@@ -38,6 +38,12 @@ function syncGitHubProject() {
                   ... on ProjectV2ItemFieldDateValue { date field { ... on ProjectV2FieldCommon { name } } }
                   ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
                   ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } }
+                  ... on ProjectV2ItemFieldIterationValue { 
+                    title 
+                    startDate 
+                    duration 
+                    field { ... on ProjectV2FieldCommon { name } } 
+                  }
                 }
               }
             }
@@ -118,8 +124,29 @@ function syncGitHubProject() {
 
     const title = item.content?.title || "No Title";
     const status = getVal("Status");
-    const planStart = getVal("StartDate");
-    const planEnd = getVal("EndDate");
+    let planStart = getVal("StartDate");
+    let planEnd = getVal("EndDate");
+
+    // StartDateまたはEndDateが空の場合、Iterationの日付をフォールバックとして使用
+    if (!planStart || !planEnd) {
+      // Iterationの値を持つノードを探す (startDateとdurationを持つものがIteration)
+      const iterValue = fields.find(v => v.startDate !== undefined && v.duration !== undefined);
+      
+      if (iterValue && iterValue.startDate) {
+        // StartDateが空ならIteration開始日をセット
+        if (!planStart) {
+          planStart = iterValue.startDate;
+        }
+        
+        // EndDateが空ならIteration終了日をセット (開始日 + duration日)
+        if (!planEnd) {
+          const sDate = new Date(iterValue.startDate);
+          // durationは日数。終了日は start + duration
+          sDate.setDate(sDate.getDate() + iterValue.duration);
+          planEnd = Utilities.formatDate(sDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+        }
+      }
+    }
     let realStart = getVal("RealStartDate");
     let realEnd = getVal("RealEndDate");
     
@@ -392,3 +419,15 @@ function updateItemFieldValue(projectId, itemId, field, value) {
   }
 }
 
+
+
+/**
+ * スプレッドシートが開かれたときに実行される関数
+ * カスタムメニューを追加します
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('ガントチャート更新')
+      .addItem('GitHubから同期', 'syncGitHubProject')
+      .addToUi();
+}

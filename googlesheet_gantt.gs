@@ -88,10 +88,10 @@ function syncGitHubProject() {
   // 今日の日付 (YYYY-MM-DD)
   const todayDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
 
-  // PlanStartDate 昇順で並べ替え（空は末尾）
+  // StartDate 昇順で並べ替え（空は末尾）
   const getPlanStartValue = (item) => {
     const fields = item.fieldValues.nodes;
-    const f = fields.find(v => v.field?.name === "PlanStartDate");
+    const f = fields.find(v => v.field?.name === "StartDate");
     return f ? (f.date || "") : "";
   };
 
@@ -118,8 +118,8 @@ function syncGitHubProject() {
 
     const title = item.content?.title || "No Title";
     const status = getVal("Status");
-    const planStart = getVal("PlanStartDate");
-    const planEnd = getVal("PlanEndDate");
+    const planStart = getVal("StartDate");
+    const planEnd = getVal("EndDate");
     let realStart = getVal("RealStartDate");
     let realEnd = getVal("RealEndDate");
     

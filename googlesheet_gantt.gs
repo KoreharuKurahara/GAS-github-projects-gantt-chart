@@ -124,20 +124,26 @@ function syncGitHubProject() {
     let realEnd = getVal("RealEndDate");
     
     // Statusが "in-progress" かつ RealStartDate が空の場合、今日の日付をセット
-    if (status && (status.toLowerCase() === "in-progress" || status === "In Progress") && !realStart && realStartDateField) {
-      console.log(`Updating RealStartDate for item: ${title}`);
-      const success = updateItemFieldValue(projectId, item.id, realStartDateField, todayDate);
-      if (success) {
-        realStart = todayDate; // シートへの反映用
+    if (status && (status.toLowerCase() === "in-progress" || status === "In Progress")) {
+      // RealStartDateフィールドが存在し、かつ値がまだ設定されていない場合のみ更新
+      if (realStartDateField && !realStart) {
+        console.log(`Updating RealStartDate for item: ${title}`);
+        const success = updateItemFieldValue(projectId, item.id, realStartDateField, todayDate);
+        if (success) {
+          realStart = todayDate; // シートへの反映用
+        }
       }
     }
     
     // Statusが "done" (Close状態) かつ RealEndDate が空の場合、今日の日付をセット
-    if (status && (status.toLowerCase() === "done" || status.toLowerCase() === "closed") && !realEnd && realEndDateField) {
-      console.log(`Updating RealEndDate for item: ${title}`);
-      const success = updateItemFieldValue(projectId, item.id, realEndDateField, todayDate);
-      if (success) {
-        realEnd = todayDate; // シートへの反映用
+    if (status && (status.toLowerCase() === "done" || status.toLowerCase() === "closed")) {
+      // RealEndDateフィールドが存在し、かつ値がまだ設定されていない場合のみ更新
+      if (realEndDateField && !realEnd) {
+        console.log(`Updating RealEndDate for item: ${title}`);
+        const success = updateItemFieldValue(projectId, item.id, realEndDateField, todayDate);
+        if (success) {
+          realEnd = todayDate; // シートへの反映用
+        }
       }
     }
 
